@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from "@vue/reactivity";
-import { onMounted, ref, watch, type Ref } from "vue";
-import _ from "lodash";
+import { ref, Ref } from "vue";
+import KonvaEditor from "@/components/KonvaEditor/Editor.vue";
+
 import {
   NIcon,
   NSelect,
@@ -11,162 +11,6 @@ import {
   NRadioButton,
   NSlider,
 } from "naive-ui";
-
-const configKonva = ref({
-  width: window.innerWidth,
-  height: window.innerHeight,
-  draggable: true,
-  name: "konvaStage",
-});
-
-const konvaStage = ref(null);
-const konvaImage = ref(null);
-const konvaGroup = ref(null);
-const scaleBy = ref(1.25);
-const anchorSize = ref(8);
-
-const image = ref(new Image());
-const imageConfig: Ref<any> = ref(null);
-
-const gridXOffset = ref(60);
-const stagePosition: Ref<any> = ref({ x: 0, y: 0 });
-const gridCoords = ref([]);
-
-function handleOnWheelStage(event) {
-  const evt: WheelEvent = event.evt;
-  evt.preventDefault();
-
-  if (konvaGroup.value) {
-    var oldScale = konvaGroup.value.getNode().scaleX();
-
-    // how to scale? Zoom in? Or zoom out?
-    let direction = event.evt.deltaY > 0 ? 1 : -1;
-
-    // when we zoom on trackpad, event.evt.ctrlKey is true
-    // in that case lets revert direction
-    if (event.evt.ctrlKey) {
-      direction = -direction;
-    }
-
-    var newScale =
-      direction > 0 ? oldScale * scaleBy.value : oldScale / scaleBy.value;
-
-    if (newScale >= 2) {
-      newScale = 2;
-    } else if (newScale >= 0.85 && newScale <= 1.15) {
-      newScale = 1;
-    } else if (newScale <= 0.5) {
-      newScale = 0.5;
-    }
-
-    konvaGroup.value.getNode().scale({ x: newScale, y: newScale });
-  }
-}
-
-onMounted(() => {
-  image.value.src =
-    "https://editor.analyticsvidhya.com/uploads/97951download%20(10).png";
-  image.value.onload = () => {
-    imageConfig.value = {
-      x: window.innerWidth / 2 - image.value.width / 2,
-      y: window.innerHeight / 2 - image.value.height / 2,
-      image: image.value,
-      width: image.value.width,
-      height: image.value.height,
-      stroke: "#fff",
-      strokeWidth: 2,
-    };
-  };
-});
-
-function handleOnStageDrag(event) {
-  if (event.target.name() === "konvaStage") {
-    stagePosition.value = event.target.position();
-  }
-}
-
-watch(
-  stagePosition,
-  _.debounce(() => {
-    gridCoords.value = [];
-
-    const startX =
-      Math.floor(
-        (-stagePosition.value.x - window.innerWidth / gridXOffset.value) /
-          gridXOffset.value
-      ) * gridXOffset.value;
-
-    const endX = Math.floor(
-      -stagePosition.value.x + window.innerWidth + gridXOffset.value * 5
-    );
-
-    const startY =
-      Math.floor(
-        (-stagePosition.value.y - window.innerHeight / 2) / gridXOffset.value
-      ) * gridXOffset.value;
-    const endY = Math.floor(
-      -stagePosition.value.y + window.innerHeight + gridXOffset.value * 5
-    );
-
-    for (var x = startX; x < endX; x += gridXOffset.value) {
-      for (var y = startY; y < endY; y += gridXOffset.value) {
-        gridCoords.value.push({
-          x,
-          y,
-        });
-      }
-    }
-  }, 20),
-  {
-    immediate: true,
-  }
-);
-// watch(panPosition, (newVal, oldVal) => {
-// })
-
-const computedAnchors = computed(() => {
-  var anchors = [];
-
-  if (imageConfig.value) {
-    // First anchor (Top center)
-    anchors.push({
-      x:
-        imageConfig.value.x +
-        imageConfig.value.width / 2 -
-        anchorSize.value / 2,
-      y: imageConfig.value.y - anchorSize.value / 2,
-    });
-
-    // Second anchor (Right center)
-    anchors.push({
-      x: imageConfig.value.x + imageConfig.value.width - anchorSize.value / 2,
-      y:
-        imageConfig.value.y +
-        imageConfig.value.height / 2 -
-        anchorSize.value / 2,
-    });
-
-    // Third anchor (Bottom center)
-    anchors.push({
-      x:
-        imageConfig.value.x +
-        imageConfig.value.width / 2 -
-        anchorSize.value / 2,
-      y: imageConfig.value.y + imageConfig.value.height - anchorSize.value / 2,
-    });
-
-    // Forth anchor (Left center)
-    anchors.push({
-      x: imageConfig.value.x - anchorSize.value / 2,
-      y:
-        imageConfig.value.y +
-        imageConfig.value.height / 2 -
-        anchorSize.value / 2,
-    });
-
-    return anchors;
-  }
-});
 
 const layers = ref([
   {
@@ -659,45 +503,7 @@ const strengthValue = ref(8);
           </div>
         </div>
       </div>
-      <v-stage
-        ref="konvaStage"
-        :config="configKonva"
-        @wheel="handleOnWheelStage"
-        v-if="imageConfig"
-        @dragmove="handleOnStageDrag"
-      >
-        <v-layer>
-          <v-group ref="gridGroup">
-            <v-circle
-              v-for="grid in gridCoords"
-              :config="{
-                x: grid.x,
-                y: grid.y,
-                radius: 1,
-                fill: '#545454',
-              }"
-            ></v-circle>
-          </v-group>
-          <v-group
-            ref="konvaGroup"
-            :config="{
-              draggable: true,
-            }"
-          >
-            <v-image ref="konvaImage" :config="imageConfig"></v-image>
-            <v-rect
-              v-for="anchor in computedAnchors"
-              :config="{
-                width: anchorSize,
-                height: anchorSize,
-                fill: '#fff',
-                x: anchor.x,
-                y: anchor.y,
-              }"
-            ></v-rect>
-          </v-group>
-        </v-layer>
-      </v-stage>
+      <KonvaEditor />
     </div>
   </n-config-provider>
 </template>
