@@ -27,6 +27,7 @@ const gridXOffset = ref(60);
 const stagePosition: Ref<any> = ref({ x: 0, y: 0 });
 const gridCoords: Ref<GridCoords[]> = ref([]);
 
+// TODO: Grid imaj üzerinde wheel gerçekleştiğinde render edilmiyor. Fixlenmesi lazım.
 function handleOnWheelStage(event: KonvaWheelEvent) {
     const evt: WheelEvent = event.evt
     evt.preventDefault()
