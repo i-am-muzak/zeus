@@ -3,13 +3,14 @@
     class="topMenu absolute bg-[#000000] p-1 rounded-[5px] flex items-center justify-center border border-[#373737]"
   >
     <div
-      class="p-1.5 flex text-[#4d4d4d] items-center justify-center rounded-[5px] cursor-pointer mr-[2px]"
+      class="p-1.5 flex items-center justify-center rounded-[5px] cursor-pointer mr-[2px]"
       v-for="tool in tools"
       @click="selectTool(tool.value)"
       :class="{
         'bg-[#212121]': tool.value === selectedTool,
         'text-[#039BE5]': tool.value === selectedTool,
         'hover:text-[#9E9E9E]': tool.value !== selectedTool,
+        'text-[#4d4d4d]': tool.value !== selectedTool,
       }"
     >
       <n-icon size="20" v-html="tool.icon"></n-icon>
@@ -18,7 +19,11 @@
 </template>
 
 <script setup lang="ts">
-import { Ref, ref } from "vue";
+import { ref, defineEmits, watch } from "vue";
+
+const emits = defineEmits<{
+  (e: "change", value: string): void;
+}>();
 
 const tools = ref([
   {
@@ -149,6 +154,14 @@ const selectedTool = ref("selection");
 function selectTool(tool: string) {
   selectedTool.value = tool;
 }
+
+watch(
+  selectedTool,
+  (newValue: string) => {
+    emits("change", newValue);
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped lang="less">

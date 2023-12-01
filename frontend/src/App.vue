@@ -6,10 +6,13 @@ import TopCanvasMenu from "@/components/Menus/TopCanvasMenu.vue";
 import LayerCanvasMenu from "@/components/Menus/LayerCanvasMenu.vue";
 import ForgeCanvasMenu from "@/components/Menus/ForgeCanvasMenu.vue";
 
-import {
-  NConfigProvider,
-  darkTheme,
-} from "naive-ui";
+import { NConfigProvider, darkTheme } from "naive-ui";
+
+const selectedTool: Ref<string | null> = ref(null);
+
+function handleOnToolChange(tool: string) {
+  selectedTool.value = tool;
+}
 
 </script>
 
@@ -17,11 +20,11 @@ import {
   <n-config-provider :theme="darkTheme">
     <div>
       <div>
-        <TopCanvasMenu />
+        <TopCanvasMenu @change="handleOnToolChange" />
         <LayerCanvasMenu />
         <ForgeCanvasMenu />
       </div>
-      <KonvaEditor />
+      <KonvaEditor :tool="selectedTool" />
     </div>
   </n-config-provider>
 </template>

@@ -11,15 +11,18 @@ import {
   type KonvaWheelEvent,
   type KonvaDragEvent,
   type GridCoords,
+  type Props,
 } from "./Editor";
 
+import { NPopover, NButton, NInput } from "naive-ui";
+
 /* Variables */
-const configKonva: Ref<ConfigKonva> = ref({
-  width: window.innerWidth,
-  height: window.innerHeight,
-  draggable: true,
-  name: "konvaStage",
-});
+// const configKonva: Ref<ConfigKonva> = ref({
+//   width: window.innerWidth,
+//   height: window.innerHeight,
+//   draggable: true,
+//   name: "konvaStage",
+// });
 
 const konvaStage: Ref<KonvaStage | null> = ref(null);
 const konvaGroup: Ref<KonvaGroup | null> = ref(null);
@@ -39,6 +42,13 @@ const imageStrokeWidth = ref(8);
 const gridXOffset = ref(60);
 const stagePosition: Ref<any> = ref({ x: 0, y: 0 });
 const gridCoords: Ref<GridCoords[]> = ref([]);
+
+const props = defineProps<Props>();
+
+// Popper
+const showPopover = ref(false);
+const popOverX = ref(undefined);
+const popOverY = ref(undefined);
 
 // TODO: Grid imaj üzerinde wheel gerçekleştiğinde render edilmiyor. Fixlenmesi lazım.
 // TODO: Eğer sağ tık basılı ise scale değişimini engelle.
@@ -279,6 +289,26 @@ const computedAnchors = computed(() => {
     return anchors;
   }
 });
+
+const configKonva = computed(() => {
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    draggable: props.tool === "free-pan" ? true : false,
+    name: "konvaStage",
+  };
+});
+
+const prompt = ref("");
+
+function test(event: KonvaDragEvent) {
+  const positions = konvaStage.value?.getNode().getPointerPosition();
+  if (positions) {
+    popOverX.value = positions.x;
+    popOverY.value = positions.y;
+    showPopover.value = true;
+  }
+}
 </script>
 
 <template>
@@ -286,9 +316,10 @@ const computedAnchors = computed(() => {
     <v-stage
       ref="konvaStage"
       :config="configKonva"
-      @wheel="handleOnWheelStage"
       v-if="imageConfig"
       @dragmove="handleOnStageDrag"
+      @wheel="handleOnWheelStage"
+      @click="test"
     >
       <v-layer>
         <v-group ref="gridGroup">
@@ -305,7 +336,7 @@ const computedAnchors = computed(() => {
         <v-group
           ref="konvaGroup"
           :config="{
-            draggable: true,
+            draggable: props.tool === 'free-pan' ? true : false,
           }"
         >
           <v-image :config="imageConfig"></v-image>
@@ -327,5 +358,89 @@ const computedAnchors = computed(() => {
         </v-group>
       </v-layer>
     </v-stage>
+
+    <n-popover
+      :show="showPopover"
+      trigger="manual"
+      :x="popOverX"
+      :y="popOverY"
+      placement="bottom"
+      :style="{ marginTop: '50px' }"
+    >
+      <template #trigger>
+        <div></div>
+      </template>
+      <template #default>
+        <div class="">
+          <div class="flex items-center">
+            <div class="flex items-center">
+              <n-button quaternary type="primary" size="small">
+                <template #icon>
+                  <n-icon>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="icon icon-tabler icon-tabler-arrow-narrow-left"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                      fill="none"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                      <path d="M5 12l14 0" />
+                      <path d="M5 12l4 4" />
+                      <path d="M5 12l4 -4" />
+                    </svg>
+                  </n-icon>
+                </template>
+              </n-button>
+              <span class="mx-1.5 text-[12px]">1/4</span>
+              <n-button quaternary type="primary" size="small">
+                <template #icon>
+                  <n-icon>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="icon icon-tabler icon-tabler-arrow-narrow-right"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                      fill="none"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                      <path d="M5 12l14 0" />
+                      <path d="M15 16l4 -4" />
+                      <path d="M15 8l4 4" />
+                    </svg>
+                  </n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div class="ml-2 w-[240px]">
+              <n-input
+                class="text-[10px]"
+                v-model:value="prompt"
+                type="text"
+                placeholder="Your prompt..."
+              />
+            </div>
+            <div class="ml-2">
+              <n-button class="text-[10px]" strong secondary type="primary">
+                Cancel
+              </n-button>
+              <n-button class="text-[10px]" strong secondary type="primary">
+                Accept
+              </n-button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </n-popover>
   </div>
 </template>

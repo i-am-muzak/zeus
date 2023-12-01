@@ -39,3 +39,7 @@ export interface KonvaDragEvent {
     type: string
     target: Stage |Image |null
 }
+
+export interface Props {
+    tool: string | null
+}
