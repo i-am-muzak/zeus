@@ -50,6 +50,25 @@ const showPopover = ref(false);
 const popOverX = ref(undefined);
 const popOverY = ref(undefined);
 
+// Drawing Mask
+const isDrawingMask: Ref<Boolean> = ref(false);
+const maskGroup = ref(null);
+const masks: Ref<any> = ref([]);
+
+// Brush General
+const brushSize: Ref<number> = ref(35);
+
+const scaleValue: Ref<number> = ref(1);
+
+const lastImagePos: Ref<any> = ref({
+  x: 0,
+  y: 0,
+});
+
+const getMasks = computed(() => {
+  return masks.value;
+});
+
 // TODO: Grid imaj üzerinde wheel gerçekleştiğinde render edilmiyor. Fixlenmesi lazım.
 // TODO: Eğer sağ tık basılı ise scale değişimini engelle.
 function handleOnWheelStage(event: KonvaWheelEvent) {
@@ -57,7 +76,8 @@ function handleOnWheelStage(event: KonvaWheelEvent) {
   evt.preventDefault();
 
   if (konvaStage.value && konvaGroup.value) {
-    var oldScale = konvaGroup.value.getNode().scaleX();
+    var oldScale = konvaStage.value.getNode().scaleX();
+
     var pointer = konvaStage.value.getNode().getPointerPosition();
 
     if (pointer) {
@@ -77,17 +97,17 @@ function handleOnWheelStage(event: KonvaWheelEvent) {
         direction > 0 ? oldScale * scaleBy.value : oldScale / scaleBy.value;
 
       if (newScale >= 2) {
-        newScale = 2;
+        newScale = scaleValue.value;
       }
 
       // If its between +- 0.15 there won't be any roughness.
       else if (newScale >= 0.85 && newScale <= 1.15) {
         newScale = 1;
       } else if (newScale <= 0.5) {
-        newScale = 0.5;
+        newScale = scaleValue.value;
       }
 
-      konvaGroup.value.getNode().scale({ x: newScale, y: newScale });
+      konvaStage.value.getNode().scale({ x: newScale, y: newScale });
 
       var newPos = {
         x: pointer.x - mousePointTo.x * newScale,
@@ -96,11 +116,17 @@ function handleOnWheelStage(event: KonvaWheelEvent) {
 
       konvaStage.value.getNode().position(newPos);
 
+      scaleValue.value = newScale;
       if (event.target) {
-        stagePosition.value = event.target.position();
+        stagePosition.value = newPos;
       }
     }
   }
+}
+
+function updateMasks(scale: number) {
+  console.log(scale);
+  
 }
 
 onMounted(() => {
@@ -236,6 +262,29 @@ watch(
   }
 );
 
+watch(scaleValue, (newValue, oldValue) => {
+  console.log("**********************");
+
+  console.log(`New: ${newValue} - Old: ${oldValue}`);
+
+  // It means the user is zooming in so we need to multiply mask width with the scale value.
+  if (newValue >= oldValue) {
+    if (newValue <= 1) {
+      // We need to revert the previous width if its zoomed out already. (Smaller than 1)
+      updateMasks(1 / oldValue);
+    } else {
+      updateMasks(newValue);
+    }
+  } else {
+    if (newValue < 1) {
+      updateMasks(newValue);
+    } else {
+      // We need to revert the previous width if its zoomed in already.
+      updateMasks(1 / oldValue);
+    }
+  }
+});
+
 const computedAnchors = computed(() => {
   var anchors = [];
 
@@ -309,6 +358,83 @@ function test(event: KonvaDragEvent) {
     showPopover.value = true;
   }
 }
+
+function imageMouseUp(event: KonvaDragEvent) {
+  event.evt.preventDefault();
+
+  switch (props.tool) {
+    case "draw-mask":
+      isDrawingMask.value = false;
+      break;
+
+    default:
+      break;
+  }
+}
+
+function imageMouseDown(event: KonvaDragEvent) {
+  event.evt.preventDefault();
+
+  switch (props.tool) {
+    case "draw-mask":
+      isDrawingMask.value = true;
+      
+
+      if (konvaStage.value && konvaGroup.value) {
+        
+        const scaledX =
+          (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x ) / scaleValue.value  ;
+        
+        const scaledY =
+          (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y) / scaleValue.value ;
+
+        masks.value.push({
+          // add point twice, so we have some drawings even on a simple click
+          stroke: "#fff",
+          strokeWidth: brushSize.value,
+          globalCompositeOperation: "destination-out",
+          // round cap for smoother lines
+          lineCap: "round",
+          lineJoin: "round",
+          points: [scaledX, scaledY, scaledX, scaledY],
+        });
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
+function imageMouseMove(event: KonvaDragEvent) {
+  switch (props.tool) {
+    case "draw-mask":
+      if (maskGroup.value) {
+        const masksLength = masks.value.length;
+        if (masksLength && isDrawingMask.value) {
+          masks.value[masksLength - 1].points = [
+            ...masks.value[masksLength - 1].points,
+            (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x ) / scaleValue.value,
+            (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y ) / scaleValue.value,
+          ];
+          
+        }
+      }
+
+      break;
+
+    default:
+      break;
+  }
+}
+
+function imageDragEnd(event) {
+  const x = event.target._lastPos.x - stagePosition.value.x;
+  const y = event.target._lastPos.y - stagePosition.value.y;
+
+  lastImagePos.value.x = x;
+  lastImagePos.value.y = y;
+}
 </script>
 
 <template>
@@ -333,13 +459,27 @@ function test(event: KonvaDragEvent) {
             }"
           ></v-circle>
         </v-group>
+
         <v-group
-          ref="konvaGroup"
           :config="{
             draggable: props.tool === 'free-pan' ? true : false,
           }"
+          @mousedown="imageMouseDown"
+          @mouseup="imageMouseUp"
+          @mousemove="imageMouseMove"
+          @dragend="imageDragEnd"
         >
-          <v-image :config="imageConfig"></v-image>
+          <v-image ref="konvaGroup" :config="imageConfig"></v-image>
+
+          <v-group ref="maskGroup"
+            ><v-line
+              v-for="(lineMask, index) in getMasks"
+              :key="index"
+              :config="lineMask"
+            >
+            </v-line>
+          </v-group>
+
           <v-rect
             v-for="(anchor, index) in computedAnchors"
             :key="index"
@@ -359,7 +499,7 @@ function test(event: KonvaDragEvent) {
       </v-layer>
     </v-stage>
 
-    <n-popover
+    <!-- <n-popover
       :show="showPopover"
       trigger="manual"
       :x="popOverX"
@@ -441,6 +581,6 @@ function test(event: KonvaDragEvent) {
           </div>
         </div>
       </template>
-    </n-popover>
+    </n-popover> -->
   </div>
 </template>
