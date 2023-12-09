@@ -126,12 +126,10 @@ function handleOnWheelStage(event: KonvaWheelEvent) {
 
 function updateMasks(scale: number) {
   console.log(scale);
-  
 }
 
 onMounted(() => {
-  image.value.src =
-    "https://editor.analyticsvidhya.com/uploads/97951download%20(10).png";
+  image.value.src = "https://i.hizliresim.com/kap164v.jpg";
   image.value.onload = () => {
     imageConfig.value = {
       x: window.innerWidth / 2 - image.value.width / 2,
@@ -348,6 +346,14 @@ const configKonva = computed(() => {
   };
 });
 
+const maskStageConfig = computed(() => {
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    name: "konvaMaskStage",
+  };
+});
+
 const prompt = ref("");
 
 function test(event: KonvaDragEvent) {
@@ -378,19 +384,19 @@ function imageMouseDown(event: KonvaDragEvent) {
   switch (props.tool) {
     case "draw-mask":
       isDrawingMask.value = true;
-      
 
       if (konvaStage.value && konvaGroup.value) {
-        
         const scaledX =
-          (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x ) / scaleValue.value  ;
-        
+          (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x) /
+          scaleValue.value;
+
         const scaledY =
-          (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y) / scaleValue.value ;
+          (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y) /
+          scaleValue.value;
 
         masks.value.push({
           // add point twice, so we have some drawings even on a simple click
-          stroke: "#fff",
+          stroke: "rgba(255, 255, 255, 1)",
           strokeWidth: brushSize.value,
           globalCompositeOperation: "destination-out",
           // round cap for smoother lines
@@ -414,10 +420,11 @@ function imageMouseMove(event: KonvaDragEvent) {
         if (masksLength && isDrawingMask.value) {
           masks.value[masksLength - 1].points = [
             ...masks.value[masksLength - 1].points,
-            (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x ) / scaleValue.value,
-            (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y ) / scaleValue.value,
+            (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x) /
+              scaleValue.value,
+            (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y) /
+              scaleValue.value,
           ];
-          
         }
       }
 
@@ -435,69 +442,126 @@ function imageDragEnd(event) {
   lastImagePos.value.x = x;
   lastImagePos.value.y = y;
 }
+
+const computedMaskCoords = computed(() => {
+  var coords = [];
+  if (imageConfig.value) {
+    for (
+      let x = imageConfig.value.x;
+      x < imageConfig.value.x + imageConfig.value.width;
+      x += 5
+    ) {
+      for (
+        let y = imageConfig.value.y;
+        y < imageConfig.value.y + imageConfig.value.height;
+        y += 5
+      ) {
+        coords.push({
+          x,
+          y,
+        });
+      }
+    }
+  }
+  return coords;
+});
 </script>
 
 <template>
   <div id="__zeus_editor_section">
-    <v-stage
-      ref="konvaStage"
-      :config="configKonva"
-      v-if="imageConfig"
-      @dragmove="handleOnStageDrag"
-      @wheel="handleOnWheelStage"
-      @click="test"
-    >
-      <v-layer>
-        <v-group ref="gridGroup">
-          <v-circle
-            v-for="grid in gridCoords"
-            :config="{
-              x: grid.x,
-              y: grid.y,
-              radius: 1,
-              fill: '#545454',
-            }"
-          ></v-circle>
-        </v-group>
-
-        <v-group
-          :config="{
-            draggable: props.tool === 'free-pan' ? true : false,
-          }"
-          @mousedown="imageMouseDown"
-          @mouseup="imageMouseUp"
-          @mousemove="imageMouseMove"
-          @dragend="imageDragEnd"
-        >
-          <v-image ref="konvaGroup" :config="imageConfig"></v-image>
-
-          <v-group ref="maskGroup"
-            ><v-line
-              v-for="(lineMask, index) in getMasks"
-              :key="index"
-              :config="lineMask"
+    <div id="__zeus_editor_mask_backround" v-if="imageConfig">
+      <v-stage :config="maskStageConfig">
+        <v-layer>
+          <v-group>
+            <v-image :config="imageConfig"></v-image>
+          </v-group>
+          <v-group>
+            <v-circle
+              v-for="coord in computedMaskCoords"
+              :config="{
+                x: coord.x,
+                y: coord.y,
+                radius: 1,
+                fill: '#1677ff',
+              }"
             >
-            </v-line>
+            </v-circle>
           </v-group>
 
           <v-rect
-            v-for="(anchor, index) in computedAnchors"
-            :key="index"
-            @mouseover="updateAnchorOpacity(anchor.name, 7, true)"
-            @mouseleave="updateAnchorOpacity(anchor.name, 0, false)"
             :config="{
-              fill: anchor.fill,
-              x: anchor.x + 2,
-              y: anchor.y,
-              width: anchor.width,
-              height: anchor.height,
-              name: anchor.name,
-              cornerRadius: anchor.cornerRadius,
+              x: imageConfig.x,
+              y: imageConfig.y,
+              width: imageConfig.width,
+              height: imageConfig.height,
+              fill: 'rgba(0, 0, 255, 0.2)',
             }"
-          ></v-rect>
-        </v-group>
-      </v-layer>
-    </v-stage>
+          >
+          </v-rect>
+        </v-layer>
+      </v-stage>
+    </div>
+    <div id="__zeus_editor_main_canvas">
+      <v-stage
+        ref="konvaStage"
+        :config="configKonva"
+        v-if="imageConfig"
+        @dragmove="handleOnStageDrag"
+        @wheel="handleOnWheelStage"
+        @click="test"
+      >
+        <v-layer>
+          <v-group ref="gridGroup">
+            <v-circle
+              v-for="grid in gridCoords"
+              :config="{
+                x: grid.x,
+                y: grid.y,
+                radius: 1,
+                fill: '#545454',
+              }"
+            ></v-circle>
+          </v-group>
+
+          <v-group
+            :config="{
+              draggable: props.tool === 'free-pan' ? true : false,
+            }"
+            @mousedown="imageMouseDown"
+            @mouseup="imageMouseUp"
+            @mousemove="imageMouseMove"
+            @dragend="imageDragEnd"
+          >
+            <v-image ref="konvaGroup" :config="imageConfig"></v-image>
+
+            <v-group ref="maskGroup"
+              ><v-line
+                v-for="(lineMask, index) in getMasks"
+                :key="index"
+                :config="lineMask"
+              >
+              </v-line>
+            </v-group>
+
+            <v-rect
+              v-for="(anchor, index) in computedAnchors"
+              :key="index"
+              @mouseover="updateAnchorOpacity(anchor.name, 7, true)"
+              @mouseleave="updateAnchorOpacity(anchor.name, 0, false)"
+              :config="{
+                fill: anchor.fill,
+                x: anchor.x + 2,
+                y: anchor.y,
+                width: anchor.width,
+                height: anchor.height,
+                name: anchor.name,
+                cornerRadius: anchor.cornerRadius,
+              }"
+            ></v-rect>
+          </v-group>
+        </v-layer>
+      </v-stage>
+    </div>
 
     <!-- <n-popover
       :show="showPopover"
@@ -584,3 +648,25 @@ function imageDragEnd(event) {
     </n-popover> -->
   </div>
 </template>
+
+<style lang="less">
+#__zeus_editor_section {
+  position: relative;
+  z-index: 1;
+  #__zeus_editor_mask_backround {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 10;
+  }
+
+  #__zeus_editor_main_canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 11;
+  }
+}
+</style>

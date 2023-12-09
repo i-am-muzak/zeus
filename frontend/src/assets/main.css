@@ -1,6 +1,7 @@
 html, body {
     margin: 0;
     padding: 0;
+    background-color: #131313;
 }
 
 .material-symbols-rounded {
@@ -12,5 +13,5 @@ html, body {
   }
 
 .konvajs-content {
-    background-color: #131313;
+    background-color: transparent;
 }
