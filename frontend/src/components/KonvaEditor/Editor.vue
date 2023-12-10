@@ -447,14 +447,14 @@ const computedMaskCoords = computed(() => {
   var coords = [];
   if (imageConfig.value) {
     for (
-      let x = imageConfig.value.x;
-      x < imageConfig.value.x + imageConfig.value.width;
-      x += 5
+      let x = imageConfig.value.x + 10;
+      x < imageConfig.value.x + imageConfig.value.width + 10;
+      x += 10
     ) {
       for (
         let y = imageConfig.value.y;
         y < imageConfig.value.y + imageConfig.value.height;
-        y += 5
+        y += 10
       ) {
         coords.push({
           x,
@@ -463,6 +463,8 @@ const computedMaskCoords = computed(() => {
       }
     }
   }
+  console.log(coords.length);
+  
   return coords;
 });
 </script>
@@ -470,22 +472,24 @@ const computedMaskCoords = computed(() => {
 <template>
   <div id="__zeus_editor_section">
     <div id="__zeus_editor_mask_backround" v-if="imageConfig">
-      <v-stage :config="maskStageConfig">
+      <v-stage :config="maskStageConfig" ref="konvaMaskStage">
         <v-layer>
           <v-group>
             <v-image :config="imageConfig"></v-image>
           </v-group>
           <v-group>
-            <v-circle
+            <v-rect
               v-for="coord in computedMaskCoords"
               :config="{
                 x: coord.x,
                 y: coord.y,
-                radius: 1,
-                fill: '#1677ff',
+                width: 2,
+                height: Math.sqrt(10 * 10 + 10* 10),
+                rotation: 45,
+                fill: '#ff3d64',
               }"
             >
-            </v-circle>
+            </v-rect>
           </v-group>
 
           <v-rect
@@ -494,7 +498,7 @@ const computedMaskCoords = computed(() => {
               y: imageConfig.y,
               width: imageConfig.width,
               height: imageConfig.height,
-              fill: 'rgba(0, 0, 255, 0.2)',
+              fill: 'rgba(0, 0, 0, 0.1)',
             }"
           >
           </v-rect>
