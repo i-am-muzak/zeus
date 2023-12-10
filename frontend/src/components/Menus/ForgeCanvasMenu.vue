@@ -186,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, Ref } from "vue";
+import { ref, type Ref } from "vue";
 import logoSource from "@/assets/images/zeus-logo.png";
 
 import {

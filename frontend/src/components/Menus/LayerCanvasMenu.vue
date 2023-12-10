@@ -72,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, Ref } from "vue";
+import { ref, type Ref } from "vue";
 const layers = ref([
   {
     isVisible: true,

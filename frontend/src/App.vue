@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, Ref } from "vue";
+import { ref, type Ref } from "vue";
 
 import KonvaEditor from "@/components/KonvaEditor/Editor.vue";
+import Editor from "@/components/CanvasEditor/Editor.vue";
+
 import TopCanvasMenu from "@/components/Menus/TopCanvasMenu.vue";
 import LayerCanvasMenu from "@/components/Menus/LayerCanvasMenu.vue";
 import ForgeCanvasMenu from "@/components/Menus/ForgeCanvasMenu.vue";
@@ -20,11 +22,12 @@ function handleOnToolChange(tool: string) {
   <n-config-provider :theme="darkTheme">
     <div>
       <div>
-        <TopCanvasMenu @change="handleOnToolChange" />
+        <!-- <TopCanvasMenu @change="handleOnToolChange" />
         <LayerCanvasMenu />
-        <ForgeCanvasMenu />
+        <ForgeCanvasMenu /> -->
       </div>
-      <KonvaEditor :tool="selectedTool" />
+      <!-- <KonvaEditor :tool="selectedTool" /> -->
+      <Editor />
     </div>
   </n-config-provider>
 </template>

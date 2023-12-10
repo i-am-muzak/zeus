@@ -25,6 +25,8 @@ import { NPopover, NButton, NInput } from "naive-ui";
 // });
 
 const konvaStage: Ref<KonvaStage | null> = ref(null);
+const konvaMaskStage: Ref<KonvaStage | null> = ref(null);
+
 const konvaGroup: Ref<KonvaGroup | null> = ref(null);
 const scaleBy = ref(1.25);
 const anchorWidth = ref(10);
@@ -47,8 +49,8 @@ const props = defineProps<Props>();
 
 // Popper
 const showPopover = ref(false);
-const popOverX = ref(undefined);
-const popOverY = ref(undefined);
+const popOverX: Ref<undefined | number> = ref(undefined);
+const popOverY: Ref<undefined | number> = ref(undefined);
 
 // Drawing Mask
 const isDrawingMask: Ref<Boolean> = ref(false);
@@ -75,7 +77,7 @@ function handleOnWheelStage(event: KonvaWheelEvent) {
   const evt: WheelEvent = event.evt;
   evt.preventDefault();
 
-  if (konvaStage.value && konvaGroup.value) {
+  if (konvaStage.value) {
     var oldScale = konvaStage.value.getNode().scaleX();
 
     var pointer = konvaStage.value.getNode().getPointerPosition();
@@ -107,14 +109,18 @@ function handleOnWheelStage(event: KonvaWheelEvent) {
         newScale = scaleValue.value;
       }
 
-      konvaStage.value.getNode().scale({ x: newScale, y: newScale });
-
       var newPos = {
         x: pointer.x - mousePointTo.x * newScale,
         y: pointer.y - mousePointTo.y * newScale,
       };
 
+      konvaStage.value.getNode().scale({ x: newScale, y: newScale });
       konvaStage.value.getNode().position(newPos);
+
+      if (konvaMaskStage.value && props.tool === "draw-mask") {
+        konvaMaskStage.value.getNode().scale({ x: newScale, y: newScale });
+        konvaMaskStage.value.getNode().position(newPos);
+      }
 
       scaleValue.value = newScale;
       if (event.target) {
@@ -147,6 +153,9 @@ onMounted(() => {
 function handleOnStageDrag(event: KonvaDragEvent) {
   if (event.target && event.target.name() === "konvaStage") {
     stagePosition.value = event.target.position();
+    if (konvaMaskStage.value) {
+      // konvaMaskStage.value.getNode().position(stagePosition.value);
+    }
   }
 }
 
@@ -358,7 +367,7 @@ const prompt = ref("");
 
 function test(event: KonvaDragEvent) {
   const positions = konvaStage.value?.getNode().getPointerPosition();
-  if (positions) {
+  if (positions && popOverX.value && popOverY.value) {
     popOverX.value = positions.x;
     popOverY.value = positions.y;
     showPopover.value = true;
@@ -396,7 +405,7 @@ function imageMouseDown(event: KonvaDragEvent) {
 
         masks.value.push({
           // add point twice, so we have some drawings even on a simple click
-          stroke: "rgba(255, 255, 255, 1)",
+          stroke: "rgba(0, 0, 0, 1)",
           strokeWidth: brushSize.value,
           globalCompositeOperation: "destination-out",
           // round cap for smoother lines
@@ -435,7 +444,7 @@ function imageMouseMove(event: KonvaDragEvent) {
   }
 }
 
-function imageDragEnd(event) {
+function imageDragEnd(event: any) {
   const x = event.target._lastPos.x - stagePosition.value.x;
   const y = event.target._lastPos.y - stagePosition.value.y;
 
@@ -464,7 +473,7 @@ const computedMaskCoords = computed(() => {
     }
   }
   console.log(coords.length);
-  
+
   return coords;
 });
 </script>
@@ -484,7 +493,7 @@ const computedMaskCoords = computed(() => {
                 x: coord.x,
                 y: coord.y,
                 width: 2,
-                height: Math.sqrt(10 * 10 + 10* 10),
+                height: Math.sqrt(10 * 10 + 10 * 10),
                 rotation: 45,
                 fill: '#ff3d64',
               }"
@@ -536,6 +545,7 @@ const computedMaskCoords = computed(() => {
             @mousemove="imageMouseMove"
             @dragend="imageDragEnd"
           >
+          
             <v-image ref="konvaGroup" :config="imageConfig"></v-image>
 
             <v-group ref="maskGroup"
@@ -562,6 +572,9 @@ const computedMaskCoords = computed(() => {
                 cornerRadius: anchor.cornerRadius,
               }"
             ></v-rect>
+
+            
+            
           </v-group>
         </v-layer>
       </v-stage>
