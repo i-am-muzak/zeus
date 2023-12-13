@@ -10,6 +10,7 @@
     "type-check": "vue-tsc --noEmit -p tsconfig.app.json --composite false"
   },
   "dependencies": {
+    "ef-infinite-canvas": "^0.6.2",
     "konva": "^9.2.3",
     "lodash": "^4.17.21",
     "pinia": "^2.1.7",
