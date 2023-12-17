@@ -2,6 +2,7 @@
 import { ref, type Ref } from "vue";
 
 import KonvaEditor from "@/components/KonvaEditor/Editor.vue";
+import InfiniteCanvasEditor from "@/components/InfiniteCanvas/InfiniteCanvasEditor.vue";
 import Editor from "@/components/CanvasEditor/Editor.vue";
 
 import TopCanvasMenu from "@/components/Menus/TopCanvasMenu.vue";
@@ -27,7 +28,8 @@ function handleOnToolChange(tool: string) {
         <ForgeCanvasMenu /> -->
       </div>
       <!-- <KonvaEditor :tool="selectedTool" /> -->
-      <Editor />
+      <!-- <Editor /> -->
+      <InfiniteCanvasEditor />
     </div>
   </n-config-provider>
 </template>

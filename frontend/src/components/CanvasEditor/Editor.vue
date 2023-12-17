@@ -1,77 +1,167 @@
 <template>
   <div>
     <div>
-      <canvas @mousedown="baseEditorMouseDown" @mouseup="baseEditorMouseUp" @mousemove="baseEditorMouseMove"
-        ref="baseEditor"></canvas>
+      <canvas
+        @mousedown="baseEditorMouseDown"
+        @mouseup="baseEditorMouseUp"
+        @mousemove="baseEditorMouseMove"
+        @wheel="baseEditorOnWheel"
+        ref="baseEditor"
+      ></canvas>
     </div>
   </div>
 </template>
 <script setup lang="ts">
+import { update } from "lodash";
 import { ref, type Ref, computed, onMounted } from "vue";
 
 const baseEditor: Ref<HTMLCanvasElement | null> = ref(null);
 
 const context: Ref<CanvasRenderingContext2D | null> = ref(null);
-const gridSize = ref(50);
-const imagePosition: Ref<any> = ref({
-  x: 0,
-  y: 0,
-});
+const gridOffset = ref(50);
+const gridSize = ref(3);
 
 const canvasBaseImage = ref(new Image());
 const isMasking = ref(false);
-const lastMaskPosition: Ref<any> = ref({
-  x: 0,
-  y: 0,
-});
 
 const isDragging = ref(false);
 const startDragPositions = ref({ x: 0, y: 0 });
 const currentOffsetPositions = ref({ x: 0, y: 0 });
+const wheelOffsetSize = ref(30);
+
+// Scale stuff
+const currentScale = ref(1);
+const scaleAmount = ref(0.1);
+
+const computedGridOffset = computed(() => {
+  return gridOffset.value;
+});
+
+const computedStartX = computed(() => {
+  return (
+    Math.floor(-currentOffsetPositions.value.x / computedGridOffset.value) *
+      computedGridOffset.value +
+    computedGridOffset.value / 2
+  );
+});
+
+const computedFinishX = computed(() => {
+  console.log(
+    `Offset X: ${currentOffsetPositions.value.x} - Start: ${
+      computedStartX.value
+    } - Finish: ${
+      ((computedStartX.value +
+        window.innerWidth / currentScale.value +
+        computedGridOffset.value * 5))
+      
+    }`
+  );
+
+  return (
+    ((computedStartX.value +
+        window.innerWidth / currentScale.value +
+        computedGridOffset.value * 5))
+    
+  );
+});
+
+const computedStartY = computed(() => {
+  return (
+    Math.floor(-currentOffsetPositions.value.y / computedGridOffset.value) *
+      computedGridOffset.value +
+    computedGridOffset.value / 2
+  );
+});
+
+const computedFinishY = computed(() => {
+  return (
+    (computedStartY.value + window.innerHeight + computedGridOffset.value * 5) /
+    currentScale.value
+  );
+});
+
+function updateCanvasScale(x: number, y: number) {
+  if (context.value) {
+    context.value.setTransform(1, 0, 0, 1, 0, 0);
+    context.value.scale(x, y);
+  }
+}
+
+function baseEditorOnWheel(event: WheelEvent) {
+  event.preventDefault();
+  const direction = event.deltaY < 0 ? -1 : 1;
+  // Here we add zooming when pressing CTRL
+  if (event.ctrlKey) {
+    // const mousePointTo = {
+    //   x: (event.clientX - konvaStage.value.getNode().x()) / oldScale,
+    //   y: (event.clientY - konvaStage.value.getNode().y()) / oldScale,
+    // };
+
+    const scale = scaleAmount.value * direction;
+    if (currentScale.value >= 0.5 && currentScale.value <= 2) {
+      currentScale.value = Math.round((currentScale.value + scale) * 10) / 10;
+      if (currentScale.value < 0.5) currentScale.value = 0.5;
+      if (currentScale.value > 2) currentScale.value = 2;
+
+      updateCanvasScale(currentScale.value, currentScale.value);
+      updatePanning();
+    }
+  }
+  // Here we only change offset.
+  else {
+    currentOffsetPositions.value.y +=
+      (direction * wheelOffsetSize.value) / currentScale.value;
+
+    updateCanvasPosition(
+      0,
+      (direction * wheelOffsetSize.value) / currentScale.value
+    );
+    updatePanning();
+  }
+}
 
 function drawGridCircles() {
   if (context.value) {
     context.value.beginPath();
 
-    const startX = Math.floor(-currentOffsetPositions.value.x / gridSize.value) * gridSize.value + gridSize.value / 2;
-    const startY = Math.floor(-currentOffsetPositions.value.y / gridSize.value) * gridSize.value + gridSize.value / 2;
+    const computedGridSize = gridSize.value;
 
-    const finishX = startX + window.innerWidth + gridSize.value * 5
-    const finishY = startY + window.innerHeight + gridSize.value * 5
-
-    for (let x = startX; x < finishX; x += gridSize.value) {
-      for (let y = startY; y < finishY; y += gridSize.value) {
-        context.value.rect(x + currentOffsetPositions.value.x, y + currentOffsetPositions.value.y, 3, 3)
+    for (
+      let x = computedStartX.value;
+      x < computedFinishX.value;
+      x += computedGridOffset.value
+    ) {
+      for (
+        let y = computedStartY.value;
+        y < computedFinishY.value;
+        y += computedGridOffset.value
+      ) {
+        context.value.rect(x, y, computedGridSize, computedGridSize);
       }
     }
-
 
     context.value.fillStyle = "#333";
     context.value.fill();
   }
 }
 
-function baseEditorMouseMove(event: MouseEvent) {
-  // const isCursorOnImage = isMouseOnImage(event.clientX, event.clientY);
-  // if (isCursorOnImage && isMasking.value) {
-  //   // Here we can draw masks.
-  //   if (context.value) {
-  //     context.value.globalCompositeOperation = "destination-out";
+function updateCanvasPosition(x: number, y: number) {
+  if (context.value) {
+    context.value.translate(x, y);
+  }
+}
 
-  //     context.value.lineTo(event.clientX, event.clientY);
-  //     context.value.lineWidth = 30;
-  //     context.value.lineCap = "round";
-  //     context.value.lineJoin = "round";
-  //     context.value.stroke();
-  //   }
-  // }
+function baseEditorMouseMove(event: MouseEvent) {
   if (isDragging.value) {
-    const deltaX = event.clientX - startDragPositions.value.x;
-    const deltaY = event.clientY - startDragPositions.value.y;
+    const deltaX =
+      (event.clientX - startDragPositions.value.x) / currentScale.value;
+    const deltaY =
+      (event.clientY - startDragPositions.value.y) / currentScale.value;
 
     currentOffsetPositions.value.x += deltaX;
     currentOffsetPositions.value.y += deltaY;
 
+    updateCanvasPosition(deltaX, deltaY);
     updateStartDragPositions(event.clientX, event.clientY);
     updatePanning();
   }
@@ -122,10 +212,10 @@ function baseEditorMouseUp(event: MouseEvent) {
 function clearCanvas() {
   if (context.value) {
     context.value.clearRect(
-      -3 * window.innerWidth,
-      -3 * window.innerHeight,
-      6 * window.innerWidth,
-      6 * window.innerHeight
+      computedStartX.value - gridOffset.value,
+      computedStartY.value - gridOffset.value,
+      (computedFinishX.value - computedStartX.value) * 2,
+      (computedFinishY.value - computedStartY.value) * 2
     );
   }
 }
@@ -133,6 +223,17 @@ function clearCanvas() {
 function updatePanning() {
   clearCanvas();
   drawGridCircles();
+  drawImage();
+}
+
+function drawImage() {
+  if (context.value) {
+    context.value.drawImage(
+      canvasBaseImage.value,
+      (context.value.canvas.width - canvasBaseImage.value.width) / 2,
+      (context.value.canvas.height - canvasBaseImage.value.height) / 2
+    );
+  }
 }
 
 onMounted(() => {
@@ -144,8 +245,7 @@ onMounted(() => {
 
     canvasBaseImage.value.src = "https://i.hizliresim.com/7hyg5rc.jpg";
     canvasBaseImage.value.onload = () => {
-      // drawImage(baseEditor.value?.width || 0, baseEditor.value?.height || 0);
-      console.log("img load");
+      drawImage();
     };
   }
 
