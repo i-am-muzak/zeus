@@ -1,256 +1,123 @@
 <template>
   <div>
-    <div>
-      <canvas
-        @mousedown="baseEditorMouseDown"
-        @mouseup="baseEditorMouseUp"
-        @mousemove="baseEditorMouseMove"
-        @wheel="baseEditorOnWheel"
-        ref="baseEditor"
-      ></canvas>
-    </div>
+    <button @click="resetCanvas">Reset</button>
+    <pre>scale: {{ scale }}</pre>
+    <pre>offset: {{ offset }}</pre>
+    <pre>viewportTopLeft: {{ viewportTopLeft }}</pre>
+    <canvas
+      ref="canvasRef"
+      :width="canvasWidth * ratio"
+      :height="canvasHeight * ratio"
+      @mousedown="startPan"
+      @mousemove="mouseMove"
+      @mouseup="mouseUp"
+      @wheel="handleWheel"
+      style="border: 2px solid #000"
+    ></canvas>
   </div>
 </template>
-<script setup lang="ts">
-import { update } from "lodash";
-import { ref, type Ref, computed, onMounted } from "vue";
 
-const baseEditor: Ref<HTMLCanvasElement | null> = ref(null);
+<script>
+export default {
+  props: {
+    canvasWidth: {
+      type: Number,
+      default: 800
+    },
+    canvasHeight: {
+      type: Number,
+      default: 400
+    },
+  },
+  data() {
+    return {
+      ratio: window.devicePixelRatio || 1,
+      context: null,
+      scale: 1,
+      offset: { x: 0, y: 0 },
+      mousePos: { x: 0, y: 0 },
+      viewportTopLeft: { x: 0, y: 0 },
+      isReset: false,
+      lastMousePos: { x: 0, y: 0 },
+      lastOffset: { x: 0, y: 0 },
+    };
+  },
+  methods: {
+    resetCanvas() {
+      if (this.context && !this.isReset) {
+        const context = this.context;
+        context.canvas.width = this.canvasWidth * this.ratio;
+        context.canvas.height = this.canvasHeight * this.ratio;
+        context.scale(this.ratio, this.ratio);
+        this.scale = 1;
 
-const context: Ref<CanvasRenderingContext2D | null> = ref(null);
-const gridOffset = ref(50);
-const gridSize = ref(3);
+        this.context = context;
+        this.offset = { x: 0, y: 0 };
+        this.mousePos = { x: 0, y: 0 };
+        this.viewportTopLeft = { x: 0, y: 0 };
+        this.lastOffset = { x: 0, y: 0 };
+        this.lastMousePos = { x: 0, y: 0 };
 
-const canvasBaseImage = ref(new Image());
-const isMasking = ref(false);
+        this.isReset = true;
+      }
+    },
+    mouseMove(event) {
+      if (this.context) {
+        const lastMousePos = this.lastMousePos;
+        const currentMousePos = { x: event.pageX, y: event.pageY };
+        this.lastMousePos = currentMousePos;
 
-const isDragging = ref(false);
-const startDragPositions = ref({ x: 0, y: 0 });
-const currentOffsetPositions = ref({ x: 0, y: 0 });
-const wheelOffsetSize = ref(30);
+        const mouseDiff = this.diffPoints(currentMousePos, lastMousePos);
+        this.offset = this.addPoints(this.offset, mouseDiff);
+      }
+    },
+    mouseUp() {
+      document.removeEventListener("mousemove", this.mouseMove);
+      document.removeEventListener("mouseup", this.mouseUp);
+    },
+    startPan(event) {
+      document.addEventListener("mousemove", this.mouseMove);
+      document.addEventListener("mouseup", this.mouseUp);
+      this.lastMousePos = { x: event.pageX, y: event.pageY };
+    },
+    handleWheel(event) {
+      event.preventDefault();
+      if (this.context) {
+        const zoom = 1 - event.deltaY / 500;
+        const viewportTopLeftDelta = {
+          x: (this.mousePos.x / this.scale) * (1 - 1 / zoom),
+          y: (this.mousePos.y / this.scale) * (1 - 1 / zoom),
+        };
+        const newViewportTopLeft = this.addPoints(
+          this.viewportTopLeft,
+          viewportTopLeftDelta
+        );
 
-// Scale stuff
-const currentScale = ref(1);
-const scaleAmount = ref(0.1);
+        this.context.translate(this.viewportTopLeft.x, this.viewportTopLeft.y);
+        this.context.scale(zoom, zoom);
+        this.context.translate(-newViewportTopLeft.x, -newViewportTopLeft.y);
 
-const computedGridOffset = computed(() => {
-  return gridOffset.value;
-});
-
-const computedStartX = computed(() => {
-  return (
-    Math.floor(-currentOffsetPositions.value.x / computedGridOffset.value) *
-      computedGridOffset.value +
-    computedGridOffset.value / 2
-  );
-});
-
-const computedFinishX = computed(() => {
-  console.log(
-    `Offset X: ${currentOffsetPositions.value.x} - Start: ${
-      computedStartX.value
-    } - Finish: ${
-      ((computedStartX.value +
-        window.innerWidth / currentScale.value +
-        computedGridOffset.value * 5))
-      
-    }`
-  );
-
-  return (
-    ((computedStartX.value +
-        window.innerWidth / currentScale.value +
-        computedGridOffset.value * 5))
-    
-  );
-});
-
-const computedStartY = computed(() => {
-  return (
-    Math.floor(-currentOffsetPositions.value.y / computedGridOffset.value) *
-      computedGridOffset.value +
-    computedGridOffset.value / 2
-  );
-});
-
-const computedFinishY = computed(() => {
-  return (
-    (computedStartY.value + window.innerHeight + computedGridOffset.value * 5) /
-    currentScale.value
-  );
-});
-
-function updateCanvasScale(x: number, y: number) {
-  if (context.value) {
-    context.value.setTransform(1, 0, 0, 1, 0, 0);
-    context.value.scale(x, y);
-  }
-}
-
-function baseEditorOnWheel(event: WheelEvent) {
-  event.preventDefault();
-  const direction = event.deltaY < 0 ? -1 : 1;
-  // Here we add zooming when pressing CTRL
-  if (event.ctrlKey) {
-    // const mousePointTo = {
-    //   x: (event.clientX - konvaStage.value.getNode().x()) / oldScale,
-    //   y: (event.clientY - konvaStage.value.getNode().y()) / oldScale,
-    // };
-
-    const scale = scaleAmount.value * direction;
-    if (currentScale.value >= 0.5 && currentScale.value <= 2) {
-      currentScale.value = Math.round((currentScale.value + scale) * 10) / 10;
-      if (currentScale.value < 0.5) currentScale.value = 0.5;
-      if (currentScale.value > 2) currentScale.value = 2;
-
-      updateCanvasScale(currentScale.value, currentScale.value);
-      updatePanning();
-    }
-  }
-  // Here we only change offset.
-  else {
-    currentOffsetPositions.value.y +=
-      (direction * wheelOffsetSize.value) / currentScale.value;
-
-    updateCanvasPosition(
-      0,
-      (direction * wheelOffsetSize.value) / currentScale.value
-    );
-    updatePanning();
-  }
-}
-
-function drawGridCircles() {
-  if (context.value) {
-    context.value.beginPath();
-
-    const computedGridSize = gridSize.value;
-
-    for (
-      let x = computedStartX.value;
-      x < computedFinishX.value;
-      x += computedGridOffset.value
-    ) {
-      for (
-        let y = computedStartY.value;
-        y < computedFinishY.value;
-        y += computedGridOffset.value
-      ) {
-        context.value.rect(x, y, computedGridSize, computedGridSize);
+        this.viewportTopLeft = newViewportTopLeft;
+        this.scale = this.scale * zoom;
+        this.isReset = false;
+      }
+    },
+    diffPoints(p1, p2) {
+      return { x: p1.x - p2.x, y: p1.y - p2.y };
+    },
+    addPoints(p1, p2) {
+      return { x: p1.x + p2.x, y: p1.y + p2.y };
+    },
+  },
+  mounted() {
+    const canvasRef = this.$refs.canvasRef;
+    if (canvasRef) {
+      const context = canvasRef.getContext("2d");
+      if (context) {
+        this.context = context;
+        this.resetCanvas();
       }
     }
-
-    context.value.fillStyle = "#333";
-    context.value.fill();
-  }
-}
-
-function updateCanvasPosition(x: number, y: number) {
-  if (context.value) {
-    context.value.translate(x, y);
-  }
-}
-
-function baseEditorMouseMove(event: MouseEvent) {
-  if (isDragging.value) {
-    const deltaX =
-      (event.clientX - startDragPositions.value.x) / currentScale.value;
-    const deltaY =
-      (event.clientY - startDragPositions.value.y) / currentScale.value;
-
-    currentOffsetPositions.value.x += deltaX;
-    currentOffsetPositions.value.y += deltaY;
-
-    updateCanvasPosition(deltaX, deltaY);
-    updateStartDragPositions(event.clientX, event.clientY);
-    updatePanning();
-  }
-}
-
-function updateStartDragPositions(x: number, y: number) {
-  startDragPositions.value = {
-    x: x,
-    y: y,
-  };
-}
-
-function baseEditorMouseDown(event: MouseEvent) {
-  // const isCursorOnImage = isMouseOnImage(event.clientX, event.clientY);
-  // if (isCursorOnImage) {
-  //   isMasking.value = true;
-
-  //   if (context.value) {
-  //     if (!lastMaskPosition.value.x) {
-  //       lastMaskPosition.value.x = event.clientX;
-  //     }
-  //     if (!lastMaskPosition.value.y) {
-  //       lastMaskPosition.value.y = event.clientY;
-  //     }
-
-  //     context.value.beginPath();
-  //     context.value.globalCompositeOperation = "destination-out";
-  //     context.value.lineTo(event.clientX, event.clientY);
-  //     context.value.lineWidth = 30;
-  //     context.value.lineCap = "round";
-  //     context.value.lineJoin = "round";
-  //     context.value.stroke();
-
-  //     lastMaskPosition.value.x = event.clientX;
-  //     lastMaskPosition.value.y = event.clientY;
-  //   }
-  // }
-
-  isDragging.value = true;
-  updateStartDragPositions(event.clientX, event.clientY);
-}
-
-function baseEditorMouseUp(event: MouseEvent) {
-  isMasking.value = false;
-  isDragging.value = false;
-}
-
-function clearCanvas() {
-  if (context.value) {
-    context.value.clearRect(
-      computedStartX.value - gridOffset.value,
-      computedStartY.value - gridOffset.value,
-      (computedFinishX.value - computedStartX.value) * 2,
-      (computedFinishY.value - computedStartY.value) * 2
-    );
-  }
-}
-
-function updatePanning() {
-  clearCanvas();
-  drawGridCircles();
-  drawImage();
-}
-
-function drawImage() {
-  if (context.value) {
-    context.value.drawImage(
-      canvasBaseImage.value,
-      (context.value.canvas.width - canvasBaseImage.value.width) / 2,
-      (context.value.canvas.height - canvasBaseImage.value.height) / 2
-    );
-  }
-}
-
-onMounted(() => {
-  if (baseEditor.value) {
-    context.value = baseEditor.value.getContext("2d");
-
-    baseEditor.value.width = window.innerWidth;
-    baseEditor.value.height = window.innerHeight;
-
-    canvasBaseImage.value.src = "https://i.hizliresim.com/7hyg5rc.jpg";
-    canvasBaseImage.value.onload = () => {
-      drawImage();
-    };
-  }
-
-  drawGridCircles();
-});
+  },
+};
 </script>
-
-<style scoped></style>

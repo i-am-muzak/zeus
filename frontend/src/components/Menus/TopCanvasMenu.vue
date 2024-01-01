@@ -1,28 +1,23 @@
 <template>
-  <div
-    class="topMenu absolute bg-[#000000] p-1 rounded-[5px] flex items-center justify-center border border-[#373737]"
-  >
-    <div
-      class="p-1.5 flex items-center justify-center rounded-[5px] cursor-pointer mr-[2px]"
-      v-for="tool in tools"
-      @click="selectTool(tool.value)"
-      :class="{
+  <div class="topMenu absolute bg-[#000000] p-1 rounded-[5px] flex items-center justify-center border border-[#373737]">
+    <div class="p-1.5 flex items-center justify-center rounded-[5px] cursor-pointer mr-[2px]" v-for="tool in tools"
+      @click="selectTool(tool.value)" :class="{
         'bg-[#212121]': tool.value === selectedTool,
         'text-[#039BE5]': tool.value === selectedTool,
         'hover:text-[#9E9E9E]': tool.value !== selectedTool,
         'text-[#4d4d4d]': tool.value !== selectedTool,
-      }"
-    >
+      }">
       <n-icon size="20" v-html="tool.icon"></n-icon>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, defineEmits, watch } from "vue";
+import { ref, defineEmits, watch, Ref } from "vue";
+import { type ToolOptions } from "./TopCanvasMenu";
 
 const emits = defineEmits<{
-  (e: "change", value: string): void;
+  (e: "change", value: ToolOptions): void;
 }>();
 
 const tools = ref([
@@ -149,15 +144,15 @@ const tools = ref([
   },
 ]);
 
-const selectedTool = ref("selection");
+const selectedTool: Ref<ToolOptions> = ref("free-pan");
 
-function selectTool(tool: string) {
+function selectTool(tool: ToolOptions) {
   selectedTool.value = tool;
 }
 
 watch(
   selectedTool,
-  (newValue: string) => {
+  (newValue: ToolOptions) => {
     emits("change", newValue);
   },
   { immediate: true }
@@ -166,10 +161,11 @@ watch(
 
 <style scoped lang="less">
 .topMenu {
-  z-index: 10;
-  top: 30px;
+  z-index: 101;
+  top: 10px;
   left: 50%;
   transform: translate(-50%, 0);
   box-shadow: rgba(0, 0, 0, 0.15) 0px 5px 15px 0px;
+
 }
 </style>

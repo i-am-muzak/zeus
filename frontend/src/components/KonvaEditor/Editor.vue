@@ -1,85 +1,63 @@
 <script setup lang="ts">
-import { computed } from "@vue/reactivity";
-import { onMounted, ref, watch, type Ref } from "vue";
+import { computed, onMounted, ref, type Ref, watch } from "vue";
+import BackgroundKonvaStage from "./BackgroundKonvaStage.vue";
 import _ from "lodash";
 
 /* Interfaces, types etc. */
 import {
   type ConfigKonva,
-  type KonvaStage,
   type KonvaGroup,
+  type KonvaStage,
+  type konvaBaseImage,
   type KonvaWheelEvent,
   type KonvaDragEvent,
-  type GridCoords,
   type Props,
 } from "./Editor";
+import type { KonvaPointerEvent } from "konva/lib/PointerEvents";
 
-import { NPopover, NButton, NInput } from "naive-ui";
-
-/* Variables */
-// const configKonva: Ref<ConfigKonva> = ref({
-//   width: window.innerWidth,
-//   height: window.innerHeight,
-//   draggable: true,
-//   name: "konvaStage",
-// });
+import CircleDashedSvg from "@/assets/images/cursors/circle-dashed.svg";
 
 const konvaStage: Ref<KonvaStage | null> = ref(null);
-const konvaMaskStage: Ref<KonvaStage | null> = ref(null);
-
-const konvaGroup: Ref<KonvaGroup | null> = ref(null);
-const scaleBy = ref(1.25);
-const anchorWidth = ref(10);
-const anchorHeight = ref(10);
-const anchorOffset = ref(2);
-const leftCenterAnchorOpacity = ref(0);
-const topCenterAnchorOpacity = ref(0);
-const rightCenterAnchorOpacity = ref(0);
-const bottomCenterAnchorOpacity = ref(0);
+const konvaBaseImage: Ref<konvaBaseImage | null> = ref(null);
+const baseGroup: Ref<KonvaGroup | null> = ref(null);
 
 const image = ref(new Image());
 const imageConfig: Ref<any> = ref(null);
-const imageStrokeWidth = ref(8);
 
-const gridXOffset = ref(60);
-const stagePosition: Ref<any> = ref({ x: 0, y: 0 });
-const gridCoords: Ref<GridCoords[]> = ref([]);
+const stageWidth: Ref<number> = ref(0);
+const stageHeight: Ref<number> = ref(0);
 
-const props = defineProps<Props>();
+// Scale - Zooming
+const scaleBy = ref(1.2);
+const currentScale = ref(1);
+const stageBackgroundImage: Ref<string | null> = ref(null);
+const currentStagePosition = ref({ x: 0, y: 0 });
 
-// Popper
-const showPopover = ref(false);
-const popOverX: Ref<undefined | number> = ref(undefined);
-const popOverY: Ref<undefined | number> = ref(undefined);
-
-// Drawing Mask
-const isDrawingMask: Ref<Boolean> = ref(false);
-const maskGroup = ref(null);
-const masks: Ref<any> = ref([]);
-
-// Brush General
-const brushSize: Ref<number> = ref(35);
-
-const scaleValue: Ref<number> = ref(1);
-
-const lastImagePos: Ref<any> = ref({
-  x: 0,
-  y: 0,
+// Draw Masks
+const maskData: Ref<any> = ref([]);
+const currentLineMask: Ref<any> = ref(null);
+const isDrawingMask = ref(false);
+const tempMaskingObject = ref({
+  maskData: [],
+  currentLineMask: null,
 });
 
-const getMasks = computed(() => {
-  return masks.value;
+// Cursor
+const showCursor = ref(true)
+
+const configKonva = computed<ConfigKonva>((): ConfigKonva => {
+  return {
+    width: stageWidth.value,
+    height: stageHeight.value,
+    draggable: false,
+    name: "baseStage",
+  };
 });
 
-// TODO: Grid imaj üzerinde wheel gerçekleştiğinde render edilmiyor. Fixlenmesi lazım.
-// TODO: Eğer sağ tık basılı ise scale değişimini engelle.
-function handleOnWheelStage(event: KonvaWheelEvent) {
-  const evt: WheelEvent = event.evt;
-  evt.preventDefault();
-
+async function handleStageOnZoom(event: KonvaWheelEvent) {
+  event.evt.preventDefault();
   if (konvaStage.value) {
     var oldScale = konvaStage.value.getNode().scaleX();
-
     var pointer = konvaStage.value.getNode().getPointerPosition();
 
     if (pointer) {
@@ -88,54 +66,94 @@ function handleOnWheelStage(event: KonvaWheelEvent) {
         y: (pointer.y - konvaStage.value.getNode().y()) / oldScale,
       };
 
-      // Check direction of scale (Zoom in or Zoom out...)
+      // how to scale? Zoom in? Or zoom out?
       let direction = event.evt.deltaY > 0 ? 1 : -1;
 
-      /**
-             Calculate the amount of scale on stage.
-             Amount of scale will be calculated by multiplying scaleBy's value that we've defined on the variables section.
-            */
+      // when we zoom on trackpad, e.evt.ctrlKey is true
+      // in that case lets revert direction
+      if (event.evt.ctrlKey) {
+        direction = -direction;
+      }
+
       var newScale =
         direction > 0 ? oldScale * scaleBy.value : oldScale / scaleBy.value;
 
-      if (newScale >= 2) {
-        newScale = scaleValue.value;
+      if (newScale >= 2 && direction > 0) {
+        return;
+      } else if (newScale <= 0.5 && direction < 0) {
+        return;
       }
 
-      // If its between +- 0.15 there won't be any roughness.
-      else if (newScale >= 0.85 && newScale <= 1.15) {
-        newScale = 1;
-      } else if (newScale <= 0.5) {
-        newScale = scaleValue.value;
-      }
+      konvaStage.value.getNode().scale({ x: newScale, y: newScale });
 
       var newPos = {
         x: pointer.x - mousePointTo.x * newScale,
         y: pointer.y - mousePointTo.y * newScale,
       };
-
-      konvaStage.value.getNode().scale({ x: newScale, y: newScale });
       konvaStage.value.getNode().position(newPos);
 
-      if (konvaMaskStage.value && props.tool === "draw-mask") {
-        konvaMaskStage.value.getNode().scale({ x: newScale, y: newScale });
-        konvaMaskStage.value.getNode().position(newPos);
-      }
+      currentStagePosition.value = konvaStage.value.getNode().position();
+      currentScale.value = newScale;
 
-      scaleValue.value = newScale;
-      if (event.target) {
-        stagePosition.value = newPos;
-      }
+      copyMasks();
+      await resetMasks();
     }
   }
 }
 
-function updateMasks(scale: number) {
-  console.log(scale);
+function resetMasks() {
+  return new Promise((resolve, reject) => {
+    currentLineMask.value = null;
+    maskData.value = [];
+    resolve(true);
+  });
 }
 
+function copyMasks() {
+  if (currentLineMask.value && maskData.value.length) {
+    tempMaskingObject.value = {
+      currentLineMask: _.cloneDeep(currentLineMask.value),
+      maskData: _.cloneDeep(maskData.value),
+    };
+  }
+}
+
+async function stageToJpeg(): Promise<string | null> {
+  if (konvaStage.value) {
+    const data = konvaStage.value
+      .getNode()
+      .toDataURL({ mimeType: "image/jpeg" });
+
+    currentLineMask.value = tempMaskingObject.value.currentLineMask;
+    maskData.value = tempMaskingObject.value.maskData;
+
+    return data;
+  }
+  return null;
+}
+
+watch(
+  currentScale,
+  _.debounce(async () => {
+    const base64 = await stageToJpeg();
+
+    if (base64) {
+      stageBackgroundImage.value = base64;
+    }
+  }, 250)
+);
+
+watch(konvaStage, async () => {
+  stageBackgroundImage.value = await stageToJpeg();
+});
+
 onMounted(() => {
-  image.value.src = "https://i.hizliresim.com/kap164v.jpg";
+  stageWidth.value = window.innerWidth;
+  stageHeight.value = window.innerHeight;
+
+  image.value.src =
+    "https://images.squarespace-cdn.com/content/v1/6213c340453c3f502425776e/80bc20a8-cdd4-457b-a7b7-c83d7d7586bf/Stability+AI+Stable+Diffusion+Astronaut+Feeding+Chickens.jpg";
+  image.value.crossOrigin = "anonymous";
   image.value.onload = () => {
     imageConfig.value = {
       x: window.innerWidth / 2 - image.value.width / 2,
@@ -143,539 +161,167 @@ onMounted(() => {
       image: image.value,
       width: image.value.width,
       height: image.value.height,
-      // stroke: "#039BE5",
-      stroke: "rgba(0, 130, 255, .4)",
-      strokeWidth: imageStrokeWidth.value,
+      draggable: false,
+      name: "baseImage",
     };
   };
 });
 
-function handleOnStageDrag(event: KonvaDragEvent) {
-  if (event.target && event.target.name() === "konvaStage") {
-    stagePosition.value = event.target.position();
-    if (konvaMaskStage.value) {
-      // konvaMaskStage.value.getNode().position(stagePosition.value);
-    }
-  }
-}
-
-function updateAnchorOpacity(
-  anchorName: string,
-  value: number,
-  onStage: boolean
-) {
-  const zeusEditorSection = document.getElementById("__zeus_editor_section");
-
-  if (!onStage) {
-    if (zeusEditorSection && zeusEditorSection.style.cursor !== "default") {
-      zeusEditorSection.style.cursor = "default";
-    }
-  }
-
-  switch (anchorName) {
-    case "top-center":
-      if (onStage) {
-        if (
-          zeusEditorSection &&
-          zeusEditorSection.style.cursor !== "n-resize"
-        ) {
-          zeusEditorSection.style.cursor = "n-resize";
-        }
-      }
-      topCenterAnchorOpacity.value = value;
-      break;
-
-    case "bottom-center":
-      if (onStage) {
-        if (
-          zeusEditorSection &&
-          zeusEditorSection.style.cursor !== "s-resize"
-        ) {
-          zeusEditorSection.style.cursor = "s-resize";
-        }
-      }
-      bottomCenterAnchorOpacity.value = value;
-      break;
-
-    case "left-center":
-      if (onStage) {
-        if (
-          zeusEditorSection &&
-          zeusEditorSection.style.cursor !== "w-resize"
-        ) {
-          zeusEditorSection.style.cursor = "w-resize";
-        }
-      }
-      leftCenterAnchorOpacity.value = value;
-      break;
-
-    case "right-center":
-      if (onStage) {
-        if (
-          zeusEditorSection &&
-          zeusEditorSection.style.cursor !== "e-resize"
-        ) {
-          zeusEditorSection.style.cursor = "e-resize";
-        }
-      }
-      rightCenterAnchorOpacity.value = value;
-      break;
-
-    default:
-      break;
-  }
-}
-/**
- * Draw grid dots when stagePosition changes on mousemove event.
- * Debounce used for performance.
- */
-watch(
-  stagePosition,
-  _.debounce(() => {
-    gridCoords.value = [];
-
-    // Start position of dots on the axis X.
-    const startX =
-      Math.floor(
-        (-stagePosition.value.x - window.innerWidth / gridXOffset.value) /
-          gridXOffset.value
-      ) * gridXOffset.value;
-
-    const endX = Math.floor(
-      -stagePosition.value.x + window.innerWidth + gridXOffset.value * 5
-    );
-
-    // Start position of dots on the axis Y.
-    const startY =
-      Math.floor(
-        (-stagePosition.value.y - window.innerHeight / 2) / gridXOffset.value
-      ) * gridXOffset.value;
-    const endY = Math.floor(
-      -stagePosition.value.y + window.innerHeight + gridXOffset.value * 5
-    );
-
-    // Push coords to the gridCoords variable so it'll be re-rendered on the template tab.
-    for (var x = startX; x < endX; x += gridXOffset.value) {
-      for (var y = startY; y < endY; y += gridXOffset.value) {
-        gridCoords.value.push({
-          x,
-          y,
-        });
-      }
-    }
-  }, 20),
-  {
-    immediate: true,
-  }
-);
-
-watch(scaleValue, (newValue, oldValue) => {
-  console.log("**********************");
-
-  console.log(`New: ${newValue} - Old: ${oldValue}`);
-
-  // It means the user is zooming in so we need to multiply mask width with the scale value.
-  if (newValue >= oldValue) {
-    if (newValue <= 1) {
-      // We need to revert the previous width if its zoomed out already. (Smaller than 1)
-      updateMasks(1 / oldValue);
-    } else {
-      updateMasks(newValue);
-    }
-  } else {
-    if (newValue < 1) {
-      updateMasks(newValue);
-    } else {
-      // We need to revert the previous width if its zoomed in already.
-      updateMasks(1 / oldValue);
-    }
-  }
-});
-
-const computedAnchors = computed(() => {
-  var anchors = [];
-
-  if (imageConfig.value) {
-    // First anchor (Left center)
-    anchors.push({
-      x:
-        imageConfig.value.x -
-        (imageStrokeWidth.value / 2 + anchorWidth.value + anchorOffset.value),
-      y: imageConfig.value.y - anchorOffset.value * 2,
-      width: anchorWidth.value,
-      height: image.value.height + imageStrokeWidth.value,
-      name: "left-center",
-      fill: `rgba(255, 255, 255, ${leftCenterAnchorOpacity.value / 100})`,
-      cornerRadius: [5, 0, 0, 5],
-    });
-
-    // Second anchor (Right center)
-    anchors.push({
-      x: imageConfig.value.x + imageConfig.value.width + anchorOffset.value,
-      y: imageConfig.value.y - anchorOffset.value * 2,
-      width: anchorWidth.value,
-      height: image.value.height + imageStrokeWidth.value,
-      name: "right-center",
-      fill: `rgba(255, 255, 255, ${rightCenterAnchorOpacity.value / 100})`,
-      cornerRadius: [0, 5, 5, 0],
-    });
-
-    // Third anchor (Top center)
-    anchors.push({
-      x: imageConfig.value.x - anchorOffset.value * 3,
-      y: imageConfig.value.y - (imageStrokeWidth.value / 2 + anchorWidth.value),
-      width: image.value.width + imageStrokeWidth.value,
-      height: anchorHeight.value,
-      name: "top-center",
-      fill: `rgba(255, 255, 255, ${topCenterAnchorOpacity.value / 100})`,
-      cornerRadius: [5, 5, 0, 0],
-    });
-
-    // Forth anchor (Bottom center)
-    anchors.push({
-      x: imageConfig.value.x - anchorOffset.value * 3,
-      y: imageConfig.value.y + image.value.width + anchorOffset.value * 2,
-      width: image.value.width + imageStrokeWidth.value,
-      height: anchorHeight.value,
-      name: "bottom-center",
-      fill: `rgba(255, 255, 255, ${bottomCenterAnchorOpacity.value / 100})`,
-      cornerRadius: [0, 0, 5, 5],
-    });
-
-    return anchors;
-  }
-});
-
-const configKonva = computed(() => {
-  return {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    draggable: props.tool === "free-pan" ? true : false,
-    name: "konvaStage",
-  };
-});
-
-const maskStageConfig = computed(() => {
-  return {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    name: "konvaMaskStage",
-  };
-});
-
-const prompt = ref("");
-
-function test(event: KonvaDragEvent) {
-  const positions = konvaStage.value?.getNode().getPointerPosition();
-  if (positions && popOverX.value && popOverY.value) {
-    popOverX.value = positions.x;
-    popOverY.value = positions.y;
-    showPopover.value = true;
-  }
-}
-
-function imageMouseUp(event: KonvaDragEvent) {
+// Image Mouse Events
+function handleOnImageMouseDown(event: KonvaPointerEvent) {
   event.evt.preventDefault();
 
-  switch (props.tool) {
-    case "draw-mask":
-      isDrawingMask.value = false;
-      break;
+  if (event.target.name() === "baseImage") {
+    isDrawingMask.value = true;
 
-    default:
-      break;
-  }
-}
+    if (konvaStage.value) {
+      // Clear current line..
+      currentLineMask.value = [];
+      var pointerPosition = konvaStage.value.getNode().getPointerPosition();
+      const scale = konvaStage.value.getNode().scale();
+      const stagePosition = konvaStage.value.getNode().position();
 
-function imageMouseDown(event: KonvaDragEvent) {
-  event.evt.preventDefault();
+      if (pointerPosition && scale) {
+        const calculatedX = (pointerPosition.x - stagePosition.x) / scale.x;
+        const calculatedY = (pointerPosition.y - stagePosition.y) / scale.y;
 
-  switch (props.tool) {
-    case "draw-mask":
-      isDrawingMask.value = true;
-
-      if (konvaStage.value && konvaGroup.value) {
-        const scaledX =
-          (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x) /
-          scaleValue.value;
-
-        const scaledY =
-          (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y) /
-          scaleValue.value;
-
-        masks.value.push({
-          // add point twice, so we have some drawings even on a simple click
-          stroke: "rgba(0, 0, 0, 1)",
-          strokeWidth: brushSize.value,
+        currentLineMask.value = {
+          stroke: "#df4b26",
+          strokeWidth: 60,
           globalCompositeOperation: "destination-out",
-          // round cap for smoother lines
           lineCap: "round",
           lineJoin: "round",
-          points: [scaledX, scaledY, scaledX, scaledY],
-        });
-      }
-      break;
-
-    default:
-      break;
-  }
-}
-
-function imageMouseMove(event: KonvaDragEvent) {
-  switch (props.tool) {
-    case "draw-mask":
-      if (maskGroup.value) {
-        const masksLength = masks.value.length;
-        if (masksLength && isDrawingMask.value) {
-          masks.value[masksLength - 1].points = [
-            ...masks.value[masksLength - 1].points,
-            (event.evt.clientX - lastImagePos.value.x - stagePosition.value.x) /
-              scaleValue.value,
-            (event.evt.clientY - lastImagePos.value.y - stagePosition.value.y) /
-              scaleValue.value,
-          ];
-        }
-      }
-
-      break;
-
-    default:
-      break;
-  }
-}
-
-function imageDragEnd(event: any) {
-  const x = event.target._lastPos.x - stagePosition.value.x;
-  const y = event.target._lastPos.y - stagePosition.value.y;
-
-  lastImagePos.value.x = x;
-  lastImagePos.value.y = y;
-}
-
-const computedMaskCoords = computed(() => {
-  var coords = [];
-  if (imageConfig.value) {
-    for (
-      let x = imageConfig.value.x + 10;
-      x < imageConfig.value.x + imageConfig.value.width + 10;
-      x += 10
-    ) {
-      for (
-        let y = imageConfig.value.y;
-        y < imageConfig.value.y + imageConfig.value.height;
-        y += 10
-      ) {
-        coords.push({
-          x,
-          y,
-        });
+          points: [calculatedX, calculatedY, calculatedX, calculatedY],
+        };
       }
     }
   }
-  console.log(coords.length);
+}
 
-  return coords;
+function handleOnImageMouseUp(event: KonvaPointerEvent) {
+  event.evt.preventDefault();
+  isDrawingMask.value = false;
+
+  if (currentLineMask.value) {
+    maskData.value.push(currentLineMask.value);
+  }
+}
+
+function handleOnImageMouseMove(event: KonvaPointerEvent) {
+  changeCursor(event.evt.clientX, event.evt.clientY);
+
+  if (konvaStage.value) {
+    if (isDrawingMask.value) {
+      event.evt.preventDefault();
+      var pointerPosition = konvaStage.value.getNode().getPointerPosition();
+      const scale = konvaStage.value.getNode().scale();
+      const stagePosition = konvaStage.value.getNode().position();
+
+      if (pointerPosition && currentLineMask.value && scale) {
+        const calculatedX = (pointerPosition.x - stagePosition.x) / scale.x;
+        const calculatedY = (pointerPosition.y - stagePosition.y) / scale.y;
+
+        currentLineMask.value.points = [
+          ...currentLineMask.value.points,
+          calculatedX,
+          calculatedY,
+        ];
+      }
+    }
+  }
+}
+
+const computedBackgroundRectConfig = computed(() => {
+  if (konvaStage.value) {
+    return {
+      x: -currentStagePosition.value.x / currentScale.value,
+      y: -currentStagePosition.value.y / currentScale.value,
+      width: window.innerWidth / currentScale.value,
+      height: window.innerHeight / currentScale.value,
+      fill: "black",
+    };
+  }
+
+  return null;
 });
+
+// cursors
+const circleDashedCursor: Ref<HTMLDivElement | null> = ref(null);
+
+function changeCursor(x: number, y: number) {
+  if (circleDashedCursor.value) {
+    circleDashedCursor.value.style.top = `${y}px`;
+    circleDashedCursor.value.style.left = `${x}px`;
+  }
+}
+
 </script>
 
 <template>
-  <div id="__zeus_editor_section">
-    <div id="__zeus_editor_mask_backround" v-if="imageConfig">
-      <v-stage :config="maskStageConfig" ref="konvaMaskStage">
-        <v-layer>
-          <v-group>
-            <v-image :config="imageConfig"></v-image>
-          </v-group>
-          <v-group>
-            <v-rect
-              v-for="coord in computedMaskCoords"
-              :config="{
-                x: coord.x,
-                y: coord.y,
-                width: 2,
-                height: Math.sqrt(10 * 10 + 10 * 10),
-                rotation: 45,
-                fill: '#ff3d64',
-              }"
-            >
-            </v-rect>
-          </v-group>
-
-          <v-rect
-            :config="{
-              x: imageConfig.x,
-              y: imageConfig.y,
-              width: imageConfig.width,
-              height: imageConfig.height,
-              fill: 'rgba(0, 0, 0, 0.1)',
-            }"
-          >
-          </v-rect>
-        </v-layer>
-      </v-stage>
-    </div>
-    <div id="__zeus_editor_main_canvas">
-      <v-stage
-        ref="konvaStage"
-        :config="configKonva"
-        v-if="imageConfig"
-        @dragmove="handleOnStageDrag"
-        @wheel="handleOnWheelStage"
-        @click="test"
-      >
-        <v-layer>
-          <v-group ref="gridGroup">
-            <v-circle
-              v-for="grid in gridCoords"
-              :config="{
-                x: grid.x,
-                y: grid.y,
-                radius: 1,
-                fill: '#545454',
-              }"
-            ></v-circle>
-          </v-group>
-
-          <v-group
-            :config="{
-              draggable: props.tool === 'free-pan' ? true : false,
-            }"
-            @mousedown="imageMouseDown"
-            @mouseup="imageMouseUp"
-            @mousemove="imageMouseMove"
-            @dragend="imageDragEnd"
-          >
+  <div id="__zeus_editor_section" v-if="imageConfig">
+    <BackgroundKonvaStage :base64="stageBackgroundImage" />
+    <div id="__zeus_editor_main_canvas" >
+      <div class="editor-container">
+        <v-stage
+          ref="konvaStage"
+          :config="configKonva"
+          v-if="imageConfig"
+          @wheel="handleStageOnZoom"
+          @mouseleave="showCursor = false"
+          @mouseenter="showCursor = true"
           
-            <v-image ref="konvaGroup" :config="imageConfig"></v-image>
-
-            <v-group ref="maskGroup"
-              ><v-line
-                v-for="(lineMask, index) in getMasks"
-                :key="index"
-                :config="lineMask"
-              >
-              </v-line>
-            </v-group>
-
-            <v-rect
-              v-for="(anchor, index) in computedAnchors"
-              :key="index"
-              @mouseover="updateAnchorOpacity(anchor.name, 7, true)"
-              @mouseleave="updateAnchorOpacity(anchor.name, 0, false)"
+        >
+          <v-layer>
+            <v-group
+              ref="baseGroup"
               :config="{
-                fill: anchor.fill,
-                x: anchor.x + 2,
-                y: anchor.y,
-                width: anchor.width,
-                height: anchor.height,
-                name: anchor.name,
-                cornerRadius: anchor.cornerRadius,
+                draggable: false,
               }"
-            ></v-rect>
+              @mouseup="handleOnImageMouseUp"
+              @mousedown="handleOnImageMouseDown"
+              @mousemove="handleOnImageMouseMove"
+            >
+              <v-rect :config="computedBackgroundRectConfig"> </v-rect>
+              <v-image ref="konvaBaseImage" :config="imageConfig"></v-image>
 
-            
-            
-          </v-group>
-        </v-layer>
-      </v-stage>
+              <v-group
+                v-if="maskData.length"
+                :config="{ name: 'LineMaskGroup' }"
+              >
+                <v-line
+                  v-for="maskLine in maskData"
+                  :config="maskLine"
+                ></v-line>
+              </v-group>
+
+              <v-group
+                v-if="currentLineMask"
+                :config="{ name: 'LineMaskGroup' }"
+              >
+                <v-line :config="currentLineMask"></v-line>
+              </v-group>
+            </v-group>
+          </v-layer>
+        </v-stage>
+      </div>
     </div>
 
-    <!-- <n-popover
-      :show="showPopover"
-      trigger="manual"
-      :x="popOverX"
-      :y="popOverY"
-      placement="bottom"
-      :style="{ marginTop: '50px' }"
-    >
-      <template #trigger>
-        <div></div>
-      </template>
-      <template #default>
-        <div class="">
-          <div class="flex items-center">
-            <div class="flex items-center">
-              <n-button quaternary type="primary" size="small">
-                <template #icon>
-                  <n-icon>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="icon icon-tabler icon-tabler-arrow-narrow-left"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      stroke-width="1.5"
-                      stroke="currentColor"
-                      fill="none"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                      <path d="M5 12l14 0" />
-                      <path d="M5 12l4 4" />
-                      <path d="M5 12l4 -4" />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-              <span class="mx-1.5 text-[12px]">1/4</span>
-              <n-button quaternary type="primary" size="small">
-                <template #icon>
-                  <n-icon>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="icon icon-tabler icon-tabler-arrow-narrow-right"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      stroke-width="1.5"
-                      stroke="currentColor"
-                      fill="none"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                      <path d="M5 12l14 0" />
-                      <path d="M15 16l4 -4" />
-                      <path d="M15 8l4 4" />
-                    </svg>
-                  </n-icon>
-                </template>
-              </n-button>
-            </div>
-            <div class="ml-2 w-[240px]">
-              <n-input
-                class="text-[10px]"
-                v-model:value="prompt"
-                type="text"
-                placeholder="Your prompt..."
-              />
-            </div>
-            <div class="ml-2">
-              <n-button class="text-[10px]" strong secondary type="primary">
-                Cancel
-              </n-button>
-              <n-button class="text-[10px]" strong secondary type="primary">
-                Accept
-              </n-button>
-            </div>
-          </div>
-        </div>
-      </template>
-    </n-popover> -->
+    <div
+      v-if="showCursor"
+      id="circleDashedCursor"
+      ref="circleDashedCursor"
+      :style="{
+        backgroundImage: `url('${CircleDashedSvg}')`,
+      }"
+    ></div>
   </div>
 </template>
 
-<style lang="less">
+<style lang="less" scoped>
 #__zeus_editor_section {
   position: relative;
-  z-index: 1;
-  #__zeus_editor_mask_backround {
-    position: absolute;
-    left: 0;
-    top: 0;
-    z-index: 10;
-  }
+  height: 100%;
+  width: 100%;
 
   #__zeus_editor_main_canvas {
     position: absolute;
@@ -683,7 +329,19 @@ const computedMaskCoords = computed(() => {
     top: 0;
     width: 100%;
     height: 100%;
-    z-index: 11;
+    z-index: 1;
+  }
+
+  #circleDashedCursor {
+    position: absolute;
+    z-index: 10;
+    left: 400px;
+    top: 400px;
+    width: 70px;
+    height: 70px;
+    stroke: white;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
   }
 }
 </style>

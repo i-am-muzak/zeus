@@ -11,7 +11,7 @@ export interface ConfigKonva {
     width: number,
     height: number,
     draggable?: boolean,
-    name: string,
+    name?: string,
 }
 
 export interface KonvaStage {
@@ -20,6 +20,10 @@ export interface KonvaStage {
 
 export interface KonvaGroup {
     getNode (): Group
+}
+
+export interface konvaBaseImage {
+    getNode (): Image
 }
 
 export interface KonvaImage {

@@ -1,0 +1,1 @@
+export type ToolOptions = "selection" | "free-pan" | "paint-brush" | "draw-mask" | "eraser"
